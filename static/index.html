@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Document</title>
+
+  <link href="/style.css" rel="stylesheet">
+  <link href="https://unpkg.com/vue-simple-notify/dist/vue-simple-notify.min.css" rel="stylesheet">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui">
+
+  <script src="https://cdn.jsdelivr.net/npm/vue/dist/vue.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+
+</head>
+<body>
+<main id="v-app">
+  <section class="alerts">
+    <vue-simple-notify :items=alerts></vue-simple-notify>
+  </section>
+
+  <section class="chat">
+    <h1> Websocket title</h1>
+    <form>
+      <input v-model="text" type="text">
+      <button type="submit" v-on:click.prevent="sendChatMessage"> Send</button>
+    </form>
+
+    <div class="tab-row">
+      <button class="tab-btn" :class="{ active: activeRoom === 'general'}" v-on:click="activeRoom = 'general'">General
+      </button>
+      <button class="tab-btn" :class="{ active: activeRoom === 'typescript'}" v-on:click="activeRoom = 'typescript'">
+        TypeScript
+      </button>
+      <button class="tab-btn" :class="{ active: activeRoom === 'nestjs'}" v-on:click="activeRoom = 'nestjs'">NestJs
+      </button>
+    </div>
+    <div class="tab-row">
+      Status : {{isMemberOfActiveRoom ? 'Joined' : 'Not joined'}}
+      <button v-on:click="toggleMemberShip()">{{isMemberOfActiveRoom ? 'Leave' : 'Join'}}</button>
+    </div>
+    <p>
+    <ul>
+      <li v-for="msg in messages[activeRoom] ">
+        <strong>{{ msg.sender}}</strong> {{msg.message}}
+      </li>
+    </ul>
+    </p>
+  </section>
+</main>
+
+<script src="https://unpkg.com/vue/dist/vue.js"></script>
+<script src="https://unpkg.com/vue-simple-notify/dist/vue-simple-notify.min.js"></script>
+<script>
+  Vue.component('VueSimpleNotify', VueSimpleNotify.VueSimpleNotify);
+
+  const app = new Vue({
+    el: '#v-app',
+    data: {
+      userName: '',
+      text: '',
+      messages: {
+        general: [],
+        typescript: [],
+        nestjs: [],
+      },
+      rooms: {
+        general: false,
+        typescript: false,
+        nestjs: false,
+      },
+      alerts: [],
+      socket: {
+        chat: null,
+        alerts: null,
+      },
+      activeRoom: 'general',
+    },
+    methods: {
+      sendChatMessage: function(event) {
+        if (!this.isMemberOfActiveRoom) {
+          return alert('You must be a member of the active room to send messages');
+        }
+
+        this.socket.chat.emit('chatToServer', {
+          sender: this.userName,
+          message: this.text,
+          room: this.activeRoom,
+        });
+        this.text = ' ';
+
+      },
+      receiveChatMessage: function(msg) {
+        this.messages[this.activeRoom] = [...this.messages[this.activeRoom], msg];
+      },
+      receiveAlertsMessage: function(alert) {
+        this.alerts = [...this.alerts, alert];
+      },
+      toggleMemberShip: function() {
+        if (this.isMemberOfActiveRoom) {
+          return this.socket.chat.emit('leaveRoom', this.activeRoom);
+        }
+        return this.socket.chat.emit('joinRoom', this.activeRoom);
+      },
+    },
+    computed: {
+      isMemberOfActiveRoom() {
+        return this.rooms[this.activeRoom];
+      },
+    },
+    created() {
+      this.userName = prompt('Enter your username');
+
+      this.socket.chat = io('http://localhost:3000/chat');
+
+      this.socket.chat.on('connect', () => {
+        this.toggleMemberShip();
+      });
+
+      this.socket.chat.on('joinedRoom', (room) => {
+        this.rooms[room] = true;
+      });
+
+      this.socket.chat.on('leftRoom', (room) => {
+        this.rooms[room] = false;
+      });
+
+      this.socket.chat.on('chatToClient', (msg) => {
+        this.receiveChatMessage(msg);
+      });
+
+      this.socket.alerts = io('http://localhost:3000/alert');
+      this.socket.alerts.on('alertToClient', (msg) => {
+        this.receiveAlertsMessage(msg);
+      });
+    },
+  });
+</script>
+</body>
+</html>
